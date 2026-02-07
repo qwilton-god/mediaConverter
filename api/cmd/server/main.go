@@ -11,17 +11,20 @@ func main() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	logger.Info("API Service starting on :8081")
+	logger.Info("API Service starting", zap.String("port", "8081"))
 
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 
-	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("# Metrics\n"))
 	})
 
-	log.Fatal(http.ListenAndServe(":8081", nil))
+	logger.Info("Server started", zap.String("address", ":8081"))
+	log.Fatal(http.ListenAndServe(":8081", mux))
 }

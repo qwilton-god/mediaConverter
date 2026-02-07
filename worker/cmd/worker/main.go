@@ -10,7 +10,7 @@ func main() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	logger.Info("Worker Service starting...")
+	logger.Info("Worker Service starting")
 
 	for {
 		logger.Info("Worker is running...")

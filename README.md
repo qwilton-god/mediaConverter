@@ -54,7 +54,6 @@
 
 ### В разработке
 
-- [ ] Shared пакеты (config, logging, metrics, kafka)
 - [ ] Database миграции и repository layer
 - [ ] API endpoints (POST /upload, GET /status)
 - [ ] Worker с Kafka consumer
@@ -101,7 +100,6 @@ docker compose up -d
 
 ## Требования к качеству кода
 
-- **DRY** - общие компоненты в shared пакетах
 - **Интерфейсы** вместо реализаций
 - **Dependency Injection** через конструкторы
 - **Graceful Shutdown** для всех сервисов
