@@ -1,0 +1,9 @@
+TZ.md
+IMPLEMENTATION_PLAN.md
+
+.env
+
+*.log
+
+*.test
+vendor/
