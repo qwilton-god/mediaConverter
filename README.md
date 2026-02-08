@@ -72,15 +72,12 @@ graph TB
 - [x] Kafka Consumer
 - [x] Processor с обновлением статуса в БД и Redis
 - [x] Graceful shutdown
-- [x] Flow: pending → processing → completed (на данный момент стоит заглушка)
-
-### Не реализовано
-- [ ] Worker pool
-- [ ] Prometheus метрики
-- [ ] Magic bytes проверка файлов
-- [ ] Retry policies
-- [ ] Полноценное тестирование
-- [ ] Документация API
+- [x] Flow: pending → processing → completed
+- [x] Worker pool
+- [x] Prometheus метрики
+- [x] Magic bytes проверка файлов
+- [x] Полноценное тестирование
+- [x] Документация API
 - [ ] Rate limiting per user
 
 ## Запуск
@@ -304,7 +301,7 @@ http://localhost:8080
 - [x] Санитизация имен файлов (filepath.Base)
 - [x] Именованные параметры в SQL (pgx)
 - [x] Переменные окружения для секретов
-- [ ] Magic bytes проверка (TODO)
+- [X] Magic bytes проверка
 
 ## Graceful Shutdown
 
@@ -341,31 +338,6 @@ cd worker && go test ./converter/... -v
 - `worker/converter` - тесты конвертера изображений (resize, crop, format conversion)
 - `api/handlers` - тесты HTTP обработчиков (upload, status)
 
-## Troubleshooting
-
-### Диск заполнен
-```bash
-# Очистить неиспользуемые Docker ресурсы
-docker system prune -a --volumes -f
-```
-
-### Kafka не запускается
-```bash
-# Пересоздать Kafka volume
-docker compose down kafka
-docker volume rm mediaconverter_kafka_data
-docker compose up -d kafka
-```
-
-### Проверить логи
-```bash
-# Все сервисы
-docker compose logs -f
-
-# Конкретный сервис
-docker compose logs -f api-service
-docker compose logs -f worker-service
-```
 
 ### Healthcheck
 ```bash
@@ -373,17 +345,3 @@ curl http://localhost/health
 # Или напрямую к API
 curl http://localhost:8081/health
 ```
-
-## Production TODO
-
-- [ ] Prometheus метрики (request duration, error rate, queue size)
-- [ ] Worker pool с ограничением concurrency
-- [ ] Retry policies для Kafka consumer
-- [ ] Magic bytes проверка файлов
-- [ ] Graceful degradation при падении Kafka
-- [ ] Индексы в PostgreSQL
-- [ ] OpenAPI/Swagger документация
-- [ ] Unit и integration тесты
-- [ ] CI/CD pipeline
-- [ ] Configuration management
-- [ ] Distributed tracing (Jaeger/Zipkin)
