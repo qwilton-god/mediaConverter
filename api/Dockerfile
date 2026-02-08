@@ -9,6 +9,8 @@ RUN go mod download
 
 COPY . ./
 
+RUN mkdir -p static
+
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
 
 FROM alpine:latest
