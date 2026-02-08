@@ -13,9 +13,13 @@ type Producer interface {
 }
 
 type TaskMessage struct {
-	TaskID   string `json:"task_id"`
-	TraceID  string `json:"trace_id"`
-	FilePath string `json:"file_path"`
+	TaskID       string `json:"task_id"`
+	TraceID      string `json:"trace_id"`
+	FilePath     string `json:"file_path"`
+	OutputFormat string `json:"output_format"`
+	TargetWidth  *int   `json:"target_width"`
+	TargetHeight *int   `json:"target_height"`
+	Crop         bool   `json:"crop"`
 }
 
 type producer struct {

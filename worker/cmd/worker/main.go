@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"mediaConverter/worker/cache"
+	"mediaConverter/worker/config"
 	"mediaConverter/worker/kafka"
+	"mediaConverter/worker/pool"
 	"mediaConverter/worker/repository"
 	"mediaConverter/worker/service"
 
@@ -21,28 +23,23 @@ func main() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	brokers := []string{"kafka:9092"}
-	topic := "media_tasks"
-	groupID := "worker-group"
-
-	dbURL := "postgres://user:password@postgres:5432/mediadb?sslmode=disable"
-	redisAddr := "redis:6379"
+	cfg := config.Load()
 
 	connectCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	db, err := pgxpool.New(connectCtx, dbURL)
+	db, err := pgxpool.New(connectCtx, cfg.DatabaseURL)
 	if err != nil {
 		logger.Fatal("Failed to connect to database", zap.Error(err))
 	}
 	defer db.Close()
 
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: redisAddr,
+		Addr: cfg.RedisAddr,
 	})
 	defer redisClient.Close()
 
-	consumer, err := kafka.NewConsumer(brokers, groupID)
+	consumer, err := kafka.NewConsumer([]string{cfg.KafkaBrokers}, cfg.KafkaGroupID)
 	if err != nil {
 		logger.Fatal("Failed to create consumer", zap.Error(err))
 	}
@@ -50,33 +47,22 @@ func main() {
 
 	repo := repository.NewPostgresRepo(db)
 	statusCache := cache.NewStatusCache(redisClient)
-	processor := service.NewProcessor(repo, statusCache)
+	processor := service.NewProcessor(repo, statusCache, logger)
+	workerPool := pool.NewWorkerPool(cfg.WorkerCount)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	handler := func(ctx context.Context, msg *kafka.TaskMessage) error {
-		logger.Info("Processing task",
-			zap.String("task_id", msg.TaskID),
-			zap.String("trace_id", msg.TraceID),
-		)
-		if err := processor.Process(ctx, msg); err != nil {
-			logger.Error("Failed to process task",
-				zap.String("task_id", msg.TaskID),
-				zap.String("trace_id", msg.TraceID),
-				zap.Error(err),
-			)
-		} else {
-			logger.Info("Task completed",
-				zap.String("task_id", msg.TaskID),
-			)
-		}
-		return nil
+		return processor.Process(ctx, msg)
 	}
 
 	go func() {
-		logger.Info("Worker started", zap.String("topic", topic))
-		if err := consumer.Consume(ctx, topic, handler); err != nil {
+		logger.Info("Worker started",
+			zap.String("topic", cfg.KafkaTopic),
+			zap.Int("worker_count", cfg.WorkerCount),
+		)
+		if err := consumer.Consume(ctx, cfg.KafkaTopic, handler); err != nil {
 			logger.Error("Consumer error", zap.Error(err))
 		}
 	}()
@@ -87,4 +73,6 @@ func main() {
 
 	logger.Info("Shutting down worker...")
 	cancel()
+	workerPool.Wait()
+	logger.Info("Worker stopped")
 }

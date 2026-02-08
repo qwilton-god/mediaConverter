@@ -31,18 +31,36 @@
         .form-group {
             margin-bottom: 20px;
         }
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
         label {
             display: block;
             margin-bottom: 8px;
             font-weight: 500;
         }
-        input[type="file"] {
+        input[type="file"],
+        input[type="text"],
+        input[type="number"],
+        select {
             width: 100%;
             padding: 12px;
             background: #3d3d3d;
             border: 1px solid #4d4d4d;
             border-radius: 6px;
             color: #e0e0e0;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
         }
         button {
             width: 100%;
@@ -108,6 +126,19 @@
         .loading.active {
             display: block;
         }
+        .download-link {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 12px 24px;
+            background: #2196F3;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+        .download-link:hover {
+            background: #1976D2;
+        }
     </style>
 </head>
 <body>
@@ -118,8 +149,36 @@
             <h2>Загрузить файл</h2>
             <div class="form-group">
                 <label for="file">Выберите файл</label>
-                <input type="file" id="file" accept=".jpg,.jpeg,.png,.gif,.pdf,.mp4">
+                <input type="file" id="file" accept=".jpg,.jpeg,.png,.gif">
             </div>
+
+            <h3>Параметры конвертации</h3>
+
+            <div class="form-group">
+                <label for="outputFormat">Формат вывода</label>
+                <select id="outputFormat">
+                    <option value="">Без конвертации</option>
+                    <option value="jpg">JPG</option>
+                    <option value="png">PNG</option>
+                </select>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="targetWidth">Ширина (px)</label>
+                    <input type="number" id="targetWidth" placeholder="1920" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="targetHeight">Высота (px)</label>
+                    <input type="number" id="targetHeight" placeholder="1080" min="1">
+                </div>
+            </div>
+
+            <div class="form-group checkbox-group">
+                <input type="checkbox" id="crop">
+                <label for="crop">Обрезать по размеру (Crop)</label>
+            </div>
+
             <button onclick="uploadFile()" id="uploadBtn">Загрузить</button>
         </div>
 
@@ -151,6 +210,24 @@
             const formData = new FormData();
             formData.append('file', file);
 
+            const outputFormat = document.getElementById('outputFormat').value;
+            const targetWidth = document.getElementById('targetWidth').value;
+            const targetHeight = document.getElementById('targetHeight').value;
+            const crop = document.getElementById('crop').checked;
+
+            if (outputFormat) {
+                formData.append('output_format', outputFormat);
+            }
+            if (targetWidth) {
+                formData.append('target_width', targetWidth);
+            }
+            if (targetHeight) {
+                formData.append('target_height', targetHeight);
+            }
+            if (crop) {
+                formData.append('crop', 'true');
+            }
+
             loading.classList.add('active');
             uploadBtn.disabled = true;
 
@@ -164,7 +241,14 @@
                 const traceId = response.headers.get('X-Trace-ID') || '';
 
                 if (response.ok) {
-                    showResult(`Файл загружен!\n\nID: ${data.id}\nTrace ID: ${traceId}\nСтатус: ${data.status}`, false);
+                    let resultText = `Файл загружен!\n\nID: ${data.id}\nTrace ID: ${traceId}\nСтатус: ${data.status}`;
+                    if (data.output_format) {
+                        resultText += `\nФормат: ${data.output_format}`;
+                    }
+                    if (data.target_width || data.target_height) {
+                        resultText += `\nРазмер: ${data.target_width || 'auto'}x${data.target_height || 'auto'}`;
+                    }
+                    showResult(resultText, false);
                     document.getElementById('taskId').value = data.id;
                 } else {
                     showResult(`Ошибка: ${data.error}\nTrace ID: ${traceId}`, true);
@@ -194,20 +278,31 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    let statusText = `Статус: ${data.status}\n`;
+                    let statusHtml = `<strong>Статус:</strong> ${data.status}<br>`;
                     if (data.original_filename) {
-                        statusText += `Файл: ${data.original_filename}\n`;
+                        statusHtml += `<strong>Файл:</strong> ${data.original_filename}<br>`;
+                    }
+                    if (data.output_format) {
+                        statusHtml += `<strong>Формат:</strong> ${data.output_format}<br>`;
+                    }
+                    if (data.target_width || data.target_height) {
+                        statusHtml += `<strong>Размер:</strong> ${data.target_width || 'auto'}x${data.target_height || 'auto'}<br>`;
                     }
                     if (data.created_at) {
-                        statusText += `Создан: ${data.created_at}\n`;
+                        statusHtml += `<strong>Создан:</strong> ${data.created_at}<br>`;
                     }
                     if (data.completed_at) {
-                        statusText += `Завершен: ${data.completed_at}\n`;
+                        statusHtml += `<strong>Завершен:</strong> ${data.completed_at}<br>`;
                     }
                     if (data.error_message) {
-                        statusText += `Ошибка: ${data.error_message}\n`;
+                        statusHtml += `<strong>Ошибка:</strong> ${data.error_message}<br>`;
                     }
-                    showResult(statusText, false);
+
+                    if (data.status === 'completed' && data.output_filename) {
+                        statusHtml += `<a href="/download/${data.output_filename}" class="download-link" download>Скачать ${data.output_filename}</a>`;
+                    }
+
+                    showResultHtml(statusHtml, false);
                 } else {
                     showResult(`Ошибка: ${data.error}`, true);
                 }
@@ -221,6 +316,13 @@
         function showResult(message, isError) {
             const resultDiv = document.getElementById('result');
             resultDiv.textContent = message;
+            resultDiv.className = 'result ' + (isError ? 'error' : 'success');
+            resultDiv.style.display = 'block';
+        }
+
+        function showResultHtml(html, isError) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = html;
             resultDiv.className = 'result ' + (isError ? 'error' : 'success');
             resultDiv.style.display = 'block';
         }

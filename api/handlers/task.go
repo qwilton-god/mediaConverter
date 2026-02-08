@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"mediaConverter/api/dto"
 	"mediaConverter/api/middleware"
 	"mediaConverter/api/service"
+	"mediaConverter/api/validation"
 )
 
 type TaskHandler struct {
@@ -64,9 +66,29 @@ func (h *TaskHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	outputFormat := r.FormValue("output_format")
+	var targetWidth, targetHeight *int
+	if w := r.FormValue("target_width"); w != "" {
+		width := 0
+		if _, err := fmt.Sscanf(w, "%d", &width); err == nil {
+			targetWidth = &width
+		}
+	}
+	if h := r.FormValue("target_height"); h != "" {
+		height := 0
+		if _, err := fmt.Sscanf(h, "%d", &height); err == nil {
+			targetHeight = &height
+		}
+	}
+	crop := r.FormValue("crop") == "true"
+
 	req := &dto.CreateTaskRequest{
 		OriginalFilename: header.Filename,
 		FilePath:         filePath,
+		OutputFormat:     outputFormat,
+		TargetWidth:      targetWidth,
+		TargetHeight:     targetHeight,
+		Crop:             crop,
 	}
 
 	resp, err := h.service.CreateTask(r.Context(), traceID, req)
@@ -110,27 +132,52 @@ func (h *TaskHandler) validateFile(header *multipart.FileHeader, file multipart.
 	const maxSize = 100 * 1024 * 1024
 
 	if header.Size > maxSize {
-		return errors.New("file too large")
+		h.logger.Warn("File too large",
+			zap.String("filename", header.Filename),
+			zap.Int64("size", header.Size),
+		)
+		return validation.ErrFileTooLarge
 	}
 
-	if !isAllowedFileType(header.Filename) {
-		return errors.New("invalid file type")
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+
+	fileType, err := validation.DetectFileType(file)
+	if err != nil {
+		h.logger.Warn("Magic bytes detection failed",
+			zap.String("filename", header.Filename),
+			zap.Error(err),
+		)
+		return validation.ErrInvalidFileType
+	}
+
+	extToType := map[string]validation.FileType{
+		".jpg":  validation.FileTypeJPEG,
+		".jpeg": validation.FileTypeJPEG,
+		".png":  validation.FileTypePNG,
+		".gif":  validation.FileTypeGIF,
+		".pdf":  validation.FileTypePDF,
+	}
+
+	expectedType, ok := extToType[ext]
+	if !ok {
+		h.logger.Warn("Unsupported file extension",
+			zap.String("filename", header.Filename),
+			zap.String("extension", ext),
+		)
+		return validation.ErrUnsupportedFormat
+	}
+
+	if fileType != expectedType {
+		h.logger.Warn("File extension mismatch with magic bytes",
+			zap.String("filename", header.Filename),
+			zap.String("extension", ext),
+			zap.String("expected_type", string(expectedType)),
+			zap.String("detected_type", string(fileType)),
+		)
+		return validation.ErrExtensionMismatch
 	}
 
 	return nil
-}
-
-func isAllowedFileType(filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
-	allowed := map[string]bool{
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".gif":  true,
-		".pdf":  true,
-		".mp4":  true,
-	}
-	return allowed[ext]
 }
 
 func sanitizeFilename(filename string) string {

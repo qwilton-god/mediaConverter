@@ -18,6 +18,10 @@ type Task struct {
 	TraceID          string
 	OriginalFilename string
 	FilePath         string
+	OutputFormat     string
+	TargetWidth      *int
+	TargetHeight     *int
+	Crop             bool
 	Status           TaskStatus
 	ErrorMessage     string
 	CreatedAt        time.Time

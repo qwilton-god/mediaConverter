@@ -10,9 +10,13 @@ import (
 type MessageHandler func(ctx context.Context, msg *TaskMessage) error
 
 type TaskMessage struct {
-	TaskID   string `json:"task_id"`
-	TraceID  string `json:"trace_id"`
-	FilePath string `json:"file_path"`
+	TaskID       string `json:"task_id"`
+	TraceID      string `json:"trace_id"`
+	FilePath     string `json:"file_path"`
+	OutputFormat string `json:"output_format"`
+	TargetWidth  *int   `json:"target_width"`
+	TargetHeight *int   `json:"target_height"`
+	Crop         bool   `json:"crop"`
 }
 
 type Consumer struct {
@@ -46,7 +50,11 @@ func (h *consumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 		if err := json.Unmarshal(msg.Value, &taskMsg); err != nil {
 			continue
 		}
-		h.fn(h.ctx, &taskMsg)
+
+		if err := h.fn(h.ctx, &taskMsg); err != nil {
+			continue
+		}
+
 		session.MarkMessage(msg, "")
 	}
 	return nil

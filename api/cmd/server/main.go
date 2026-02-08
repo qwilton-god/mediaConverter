@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"embed"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -72,6 +75,49 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "text/html")
 		w.Write(content)
+	})
+
+	mux.HandleFunc("/download/", func(w http.ResponseWriter, r *http.Request) {
+		filename := r.URL.Path[len("/download/"):]
+		if filename == "" {
+			http.Error(w, "Filename is required", http.StatusBadRequest)
+			return
+		}
+
+		filePath := "/uploads/" + filename
+
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			http.Error(w, "File not found", http.StatusNotFound)
+			return
+		}
+
+		file, err := os.Open(filePath)
+		if err != nil {
+			http.Error(w, "Failed to open file", http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+
+		contentType := "application/octet-stream"
+		switch {
+		case strings.HasSuffix(filename, ".jpg"), strings.HasSuffix(filename, ".jpeg"):
+			contentType = "image/jpeg"
+		case strings.HasSuffix(filename, ".png"):
+			contentType = "image/png"
+		case strings.HasSuffix(filename, ".gif"):
+			contentType = "image/gif"
+		case strings.HasSuffix(filename, ".pdf"):
+			contentType = "application/pdf"
+		case strings.HasSuffix(filename, ".mp4"):
+			contentType = "video/mp4"
+		}
+
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+		w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
+
+		io.Copy(w, file)
 	})
 
 	mux.HandleFunc("/upload", taskHandler.Upload)

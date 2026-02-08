@@ -20,8 +20,8 @@ func NewPostgresRepo(db *database.DB) Repository {
 
 func (r *PostgresRepo) CreateTask(ctx context.Context, task *models.Task) error {
 	query := `
-		INSERT INTO tasks (trace_id, original_filename, file_path, status, error_message)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO tasks (trace_id, original_filename, file_path, output_format, target_width, target_height, crop, status, error_message)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -30,6 +30,10 @@ func (r *PostgresRepo) CreateTask(ctx context.Context, task *models.Task) error 
 		task.TraceID,
 		task.OriginalFilename,
 		task.FilePath,
+		task.OutputFormat,
+		task.TargetWidth,
+		task.TargetHeight,
+		task.Crop,
 		task.Status,
 		task.ErrorMessage,
 	).Scan(&createdTask.ID, &createdTask.CreatedAt, &createdTask.UpdatedAt)
@@ -47,7 +51,8 @@ func (r *PostgresRepo) CreateTask(ctx context.Context, task *models.Task) error 
 
 func (r *PostgresRepo) GetTask(ctx context.Context, id string) (*models.Task, error) {
 	query := `
-		SELECT id, trace_id, original_filename, file_path, status, error_message, created_at, updated_at, completed_at
+		SELECT id, trace_id, original_filename, file_path, output_format, target_width, target_height, crop,
+		       status, error_message, created_at, updated_at, completed_at
 		FROM tasks
 		WHERE id = $1
 	`
@@ -60,6 +65,10 @@ func (r *PostgresRepo) GetTask(ctx context.Context, id string) (*models.Task, er
 		&task.TraceID,
 		&task.OriginalFilename,
 		&task.FilePath,
+		&task.OutputFormat,
+		&task.TargetWidth,
+		&task.TargetHeight,
+		&task.Crop,
 		&task.Status,
 		&task.ErrorMessage,
 		&task.CreatedAt,
