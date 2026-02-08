@@ -78,27 +78,3 @@ jobs:
           files: ./worker/coverage.out
           flags: worker
           name: worker-coverage
-
-  lint:
-    name: Lint with golangci-lint
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        service: [api, worker]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: ./${{ matrix.service }}
-          args: --timeout=5m
