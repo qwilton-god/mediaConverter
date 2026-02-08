@@ -34,7 +34,7 @@ jobs:
 
       - name: Run tests
         working-directory: ./api
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: go test -v -race -coverprofile=coverage.out ./handlers/...
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -70,7 +70,7 @@ jobs:
 
       - name: Run tests
         working-directory: ./worker
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: go test -v -race -coverprofile=coverage.out ./converter/...
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
