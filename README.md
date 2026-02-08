@@ -14,27 +14,35 @@
 
 ## Архитектура
 
-```
-┌─────────┐     ┌────────────┐     ┌─────────┐
-│ Client  │───▶│   Nginx    │───▶│  API    │
-└─────────┘     └────────────┘     └────┬────┘
-                     │                  │
-                     │                  ▼
-                     │            ┌───────────┐
-                     │            │  Kafka    │
-                     │            └─────┬─────┘
-                     │                  │
-                     │            ┌─────▼─────┐
-                     │            │  Worker   │
-                     │            └─────┬─────┘
-                     │                  │
-                     ▼            ┌─────▼─────┐
-                ┌────────┐        │PostgreSQL │
-                │ Static │        └───────────┘
-                └────────┘             ▲
-                                     ┌─┴───┐
-                                     │Redis│
-                                     └─────┘
+```mermaid
+graph TB
+    Client[Client] -->|HTTP| Nginx[Nginx API Gateway]
+    Nginx -->|Load Balancing| API1[API Service 1]
+    Nginx -->|Load Balancing| API2[API Service 2]
+    Nginx -->|Static Files| Static[Static Files]
+
+    API1 -->|Publish Task| Kafka[Kafka Broker]
+    API2 -->|Publish Task| Kafka
+
+    API1 -->|Write| PG[(PostgreSQL)]
+    API1 -->|Cache/Read| Redis[(Redis)]
+    API2 -->|Write| PG
+    API2 -->|Cache/Read| Redis
+
+    Kafka -->|Consume Task| Worker[Worker Service]
+    Worker -->|Update Status| PG
+    Worker -->|Update Cache| Redis
+    Worker -->|Process Image| Uploads["/uploads"]
+
+    subgraph Monitoring
+        Prometheus[Prometheus]
+        Grafana[Grafana]
+    end
+
+    API1 -->|Metrics| Prometheus
+    API2 -->|Metrics| Prometheus
+    Worker -->|Metrics| Prometheus
+    Prometheus --> Grafana
 ```
 
 ## Текущий статус
@@ -102,44 +110,128 @@ make migrate-up
 
 ## API Endpoints
 
-### Загрузка файла
+### POST /upload - Загрузка файла
 
+Загружает файл для обработки и возвращает ID задачи.
+
+**Параметры формы:**
+- `file` (обязательно): Файл для обработки (JPEG, PNG, GIF, PDF, MP4)
+- `output_format` (опциональ): Формат вывода (jpg, png)
+- `target_width` (опциональ): Целевая ширина в пикселях
+- `target_height` (опциональ): Целевая высота в пикселях
+- `crop` (опциональ): Обрезка по центру (true/false)
+
+**Примеры:**
+
+Базовая загрузка:
 ```bash
 curl -X POST http://localhost/upload \
   -F "file=@image.jpg" \
   -v
 ```
 
-**Ответ:**
+С параметрами конвертации:
+```bash
+curl -X POST http://localhost/upload \
+  -F "file=@image.jpg" \
+  -F "output_format=png" \
+  -F "target_width=800" \
+  -F "target_height=600" \
+  -F "crop=true" \
+  -v
+```
+
+**Успешный ответ (201):**
 ```json
 {
-  "id": "uuid-task-id",
-  "trace_id": "uuid-trace-id",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "trace_id": "dca9a48326bd1a644a51239432795179",
+  "status": "pending",
+  "original_filename": "image.jpg",
+  "output_format": "png",
+  "target_width": 800,
+  "target_height": 600,
+  "crop": true,
+  "created_at": "2026-02-07T18:00:00Z"
+}
+```
+
+**Ошибка (400/500):**
+```json
+{
+  "error": "Invalid file",
+  "trace_id": "dca9a48326bd1a644a51239432795179"
+}
+```
+
+### GET /status/:id - Проверка статуса
+
+Возвращает текущий статус задачи обработки.
+
+**Пример:**
+```bash
+curl http://localhost/status/550e8400-e29b-41d4-a716-446655440000
+```
+
+**Ответ при статусе pending (200):**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "trace_id": "dca9a48326bd1a644a51239432795179",
   "status": "pending",
   "original_filename": "image.jpg",
   "created_at": "2026-02-07T18:00:00Z"
 }
 ```
 
-### Проверка статуса
-
-```bash
-curl http://localhost/status/<task_id>
-```
-
-**Ответ:**
+**Ответ при статусе completed (200):**
 ```json
 {
-  "id": "uuid-task-id",
-  "trace_id": "uuid-trace-id",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "trace_id": "dca9a48326bd1a644a51239432795179",
   "status": "completed",
   "original_filename": "image.jpg",
+  "output_filename": "550e8400-e29b-41d4-a716-446655440000.png",
   "created_at": "2026-02-07T18:00:00Z",
   "completed_at": "2026-02-07T18:00:03Z"
 }
 ```
 
-**Статусы:** `pending` → `processing` → `completed` / `failed`
+**Ответ при ошибке (404):**
+```json
+{
+  "error": "Task not found",
+  "trace_id": "dca9a48326bd1a644a51239432795179"
+}
+```
+
+**Жизненный цикл задачи:**
+`pending` → `processing` → `completed` / `failed`
+
+### GET /download/:filename - Скачивание обработанного файла
+
+Скачивает обработанный файл.
+
+**Пример:**
+```bash
+curl -O http://localhost/download/550e8400-e29b-41d4-a716-446655440000.png
+```
+
+### GET /health - Health check
+
+Проверка здоровья сервиса.
+
+**Пример:**
+```bash
+curl http://localhost/health
+```
+
+**Ответ (200):**
+```json
+{
+  "status": "healthy"
+}
+```
 
 ## Миграции базы данных
 
@@ -226,6 +318,28 @@ http://localhost:8080
 ```bash
 docker compose stop api-service  # Graceful shutdown за 30s
 ```
+
+## Тесты
+
+Проект содержит unit тесты для основных компонентов:
+
+```bash
+# Запустить тесты worker service
+cd worker && go test ./... -v
+
+# Запустить тесты API service
+cd api && go test ./... -v
+
+# Запустить тесты с покрытием
+cd api && go test ./... -cover
+
+# Запустить конкретный пакет
+cd worker && go test ./converter/... -v
+```
+
+**Тестовое покрытие:**
+- `worker/converter` - тесты конвертера изображений (resize, crop, format conversion)
+- `api/handlers` - тесты HTTP обработчиков (upload, status)
 
 ## Troubleshooting
 

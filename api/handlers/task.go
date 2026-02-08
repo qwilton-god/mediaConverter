@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,22 +16,42 @@ import (
 
 	"mediaConverter/api/dto"
 	"mediaConverter/api/middleware"
-	"mediaConverter/api/service"
 	"mediaConverter/api/validation"
 )
 
+type TaskService interface {
+	CreateTask(ctx context.Context, traceID string, req *dto.CreateTaskRequest) (*dto.TaskResponse, error)
+	GetTaskStatus(ctx context.Context, taskID string) (*dto.TaskResponse, error)
+}
+
 type TaskHandler struct {
-	service *service.TaskService
+	service TaskService
 	logger  *zap.Logger
 }
 
-func NewTaskHandler(service *service.TaskService, logger *zap.Logger) *TaskHandler {
+func NewTaskHandler(service TaskService, logger *zap.Logger) *TaskHandler {
 	return &TaskHandler{
 		service: service,
 		logger:  logger,
 	}
 }
 
+// Upload handles file upload requests.
+//
+//	@Summary		Upload file for processing
+//	@Description	Upload a media file (JPEG, PNG, GIF, PDF, MP4) for asynchronous processing. Returns a task ID for tracking.
+//	@Tags			tasks
+//	@Accept			multipart/form-data
+//	@Produce		json
+//	@Param			file			formData	file		true	"File to upload"
+//	@Param			output_format	formData	string	false	"Output format (jpg, png)"
+//	@Param			target_width	formData	int		false	"Target width in pixels"
+//	@Param			target_height	formData	int		false	"Target height in pixels"
+//	@Param			crop			formData	bool	false	"Crop to center (true/false)"
+//	@Success		201				{object}	dto.TaskResponse
+//	@Failure		400				{object}	dto.ErrorResponse
+//	@Failure		500				{object}	dto.ErrorResponse
+//	@Router			/upload [post]
 func (h *TaskHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	traceID := middleware.GetTraceID(r.Context())
 
@@ -106,6 +127,17 @@ func (h *TaskHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusCreated, resp)
 }
 
+// Status returns the current status of a processing task.
+//
+//	@Summary		Get task status
+//	@Description	Get the current processing status of a task by its ID. Status can be: pending, processing, completed, or failed.
+//	@Tags			tasks
+//	@Produce		json
+//	@Param			id	path		string	true	"Task ID"
+//	@Success		200	{object}	dto.TaskResponse
+//	@Failure		404	{object}	dto.ErrorResponse
+//	@Failure		500	{object}	dto.ErrorResponse
+//	@Router			/status/{id} [get]
 func (h *TaskHandler) Status(w http.ResponseWriter, r *http.Request) {
 	traceID := middleware.GetTraceID(r.Context())
 
